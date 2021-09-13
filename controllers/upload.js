@@ -1,19 +1,15 @@
+const Video = require("../models/video");
 const OAuth2Data = require("../credentials.json");
 const { google } = require("googleapis");
 const multer = require("multer");
 var fs = require("fs");
 
-var title;
-var description;
-var tags = [];
-var scheduledDate;
-var status;
 //authentication
 const clientId = OAuth2Data.web.client_id;
 const clientSecret = OAuth2Data.web.client_secret;
 const redirectUrl = OAuth2Data.web.redirect_uris[0];
 
-const oauth2Client = new google.auth.OAuth2(
+const oAuth2Client = new google.auth.OAuth2(
   clientId,
   clientSecret,
   redirectUrl
@@ -33,21 +29,21 @@ var Storage = multer.diskStorage({
   },
 });
 
-var upload = multer({
+exports.upload = multer({
   storage: Storage,
-}).single("file"); //Field name and max count
+}).single("media"); //Field name and max count
 
 // autheticate user
 exports.authenticate = (req, res) => {
   if (!isAuthenticated) {
-    var authUrl = oauth2Client.generateAuthUrl({
+    var authUrl = oAuth2Client.generateAuthUrl({
       access_type: "offline",
       scope: scopes,
     });
-    res.redirect(authUrl);
+    res.json({ url: authUrl });
   } else {
     var oauth2 = google.oauth2({
-      auth: oauth2Client,
+      auth: oAuth2Client,
       version: "v2",
     });
 
@@ -68,72 +64,76 @@ exports.authenticate = (req, res) => {
 exports.callback = (req, res) => {
   const code = req.query.code;
   if (code) {
-    oauth2Client.getToken(code, (err, token) => {
+    oAuth2Client.getToken(code, (err, token) => {
       if (err) {
         return res.status(400).json({
           error: err,
         });
       } else {
-        oauth2Client.setCredentials(token);
+        oAuth2Client.setCredentials(token);
         isAuthenticated = true;
-        res.redirect("/");
+        res.redirect("http://localhost:3000");
       }
     });
   }
 };
 
 exports.uploadVideo = (req, res) => {
-  upload(req, res, (err) => {
+  console.log(req.file);
+  const { title, description, tags, privacyStatus } = req.body;
+  const youtube = google.youtube({ version: "v3", auth: oAuth2Client });
+  const video = new Video(req.body);
+  video.media = req.file.path;
+  youtube.videos.insert(
+    {
+      resource: {
+        // Video title and description
+        snippet: {
+          title: title,
+          description: description,
+          tags: tags,
+        },
+        //    status
+        status: {
+          privacyStatus: privacyStatus,
+        },
+      },
+      // This is for the callback function
+      part: "snippet,status",
+
+      // Create the readable stream to upload the video
+      media: {
+        body: fs.createReadStream(req.file.path),
+      },
+    },
+    (err, data) => {
+      console.log(err);
+      if (err) {
+        return res.status(400).json({
+          error: err,
+        });
+      }
+      console.log(data);
+      console.log("Done.");
+      fs.unlinkSync(req.file.path);
+      return res.json({
+        message: success,
+      });
+    }
+  );
+
+  //saving icon object in database
+  video.save((err, video) => {
     if (err) {
       return res.status(400).json({
-        error: err,
+        error: "NOT able to save video in DB",
       });
-    } else {
-      console.log(req.file.path);
-      title = req.body.title;
-      description = req.body.description;
-      tags = req.body.tags;
-      scheduledDate = req.body.scheduledDate;
-      status = req.body.status;
-
-      const youtube = google.youtube({ version: "v3", auth: oauth2Client });
-
-      const publishDate = new Date("2021-09-13 16:10:00");
-      youtube.videos.insert(
-        {
-          resource: {
-            // Video title and description
-            snippet: {
-              title: title,
-              description: description,
-              tags: tags,
-            },
-            //    status
-            status: {
-              privacyStatus: status,
-              publishAt: publishDate,
-            },
-          },
-          // This is for the callback function
-          part: "snippet,status",
-
-          // Create the readable stream to upload the video
-          media: {
-            body: fs.createReadStream(req.file.path),
-          },
-        },
-        (err, data) => {
-          if (err) {
-            return res.status(400).json({
-              error: err,
-            });
-          }
-          console.log(data);
-          console.log("Done.");
-          fs.unlinkSync(req.file.path);
-          res.render("success", { name: name, success: true });
-        }
-      );
     }
+    res.json({
+      title: video.title,
+      description: video.description,
+      tags: video.tags,
+      privacyStatus: video.privacyStatus,
+    });
   });
 };
