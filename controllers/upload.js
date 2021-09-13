@@ -1,4 +1,4 @@
-const OAuth2Data = require("./credentials.json");
+const OAuth2Data = require("../credentials.json");
 const { google } = require("googleapis");
 const multer = require("multer");
 var fs = require("fs");
