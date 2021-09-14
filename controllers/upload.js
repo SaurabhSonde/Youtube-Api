@@ -1,5 +1,5 @@
 const Video = require("../models/video");
-const OAuth2Data = require("../credentials.json");
+const OAuth2Data = require("../credentials2.json");
 const { google } = require("googleapis");
 const multer = require("multer");
 var fs = require("fs");
@@ -9,7 +9,7 @@ const clientId = OAuth2Data.web.client_id;
 const clientSecret = OAuth2Data.web.client_secret;
 const redirectUrl = OAuth2Data.web.redirect_uris[0];
 
-const oAuth2Client = new google.auth.OAuth2(
+const oauth2Client = new google.auth.OAuth2(
   clientId,
   clientSecret,
   redirectUrl
@@ -36,14 +36,14 @@ exports.upload = multer({
 // autheticate user
 exports.authenticate = (req, res) => {
   if (!isAuthenticated) {
-    var authUrl = oAuth2Client.generateAuthUrl({
+    var authUrl = oauth2Client.generateAuthUrl({
       access_type: "offline",
       scope: scopes,
     });
     res.json({ url: authUrl });
   } else {
     var oauth2 = google.oauth2({
-      auth: oAuth2Client,
+      auth: oauth2Client,
       version: "v2",
     });
 
@@ -64,13 +64,13 @@ exports.authenticate = (req, res) => {
 exports.callback = (req, res) => {
   const code = req.query.code;
   if (code) {
-    oAuth2Client.getToken(code, (err, token) => {
+    oauth2Client.getToken(code, (err, token) => {
       if (err) {
         return res.status(400).json({
           error: err,
         });
       } else {
-        oAuth2Client.setCredentials(token);
+        oauth2Client.setCredentials(token);
         isAuthenticated = true;
         res.redirect("http://localhost:3000");
       }
@@ -79,9 +79,8 @@ exports.callback = (req, res) => {
 };
 
 exports.uploadVideo = (req, res) => {
-  console.log(req.file);
   const { title, description, tags, privacyStatus } = req.body;
-  const youtube = google.youtube({ version: "v3", auth: oAuth2Client });
+  const youtube = google.youtube({ version: "v3", auth: oauth2Client });
   const video = new Video(req.body);
   video.media = req.file.path;
   youtube.videos.insert(
@@ -117,7 +116,7 @@ exports.uploadVideo = (req, res) => {
       console.log("Done.");
       fs.unlinkSync(req.file.path);
       return res.json({
-        message: success,
+        message: "success",
       });
     }
   );
