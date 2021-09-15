@@ -17,7 +17,7 @@ const oauth2Client = new google.auth.OAuth2(
 
 var isAuthenticated = false;
 var scopes =
-  "https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/userinfo.profile";
+  "https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/youtube.force-ssl";
 
 //   multer
 var Storage = multer.diskStorage({
@@ -121,18 +121,68 @@ exports.uploadVideo = (req, res) => {
     }
   );
 
-  //saving icon object in database
-  video.save((err, video) => {
-    if (err) {
-      return res.status(400).json({
-        error: "NOT able to save video in DB",
+  // //saving icon object in database
+  // video.save((err, video) => {
+  //   if (err) {
+  //     return res.status(400).json({
+  //       error: "NOT able to save video in DB",
+  //     });
+  //   }
+  //   res.json({
+  //     title: video.title,
+  //     description: video.description,
+  //     tags: video.tags,
+  //     privacyStatus: video.privacyStatus,
+  //   });
+  // });
+};
+
+// brodcast video
+exports.broadcastVideo = (req, res) => {
+  const {
+    title,
+    description,
+    tags,
+    privacyStatus,
+    scheduledStartTime,
+    scheduledEndTime,
+  } = req.body;
+  const youtube = google.youtube({ version: "v3", auth: oauth2Client });
+
+  youtube.liveBroadcasts.insert(
+    {
+      resource: {
+        // Video title and description
+        snippet: {
+          title: title,
+          description: description,
+          tags: tags,
+          scheduledStartTime: scheduledStartTime,
+          scheduledEndTime: scheduledEndTime,
+        },
+        //    status
+        status: {
+          privacyStatus: privacyStatus,
+        },
+      },
+      part: "snippet,status",
+      media: {
+        body: fs.createReadStream(req.file.path),
+      },
+    },
+    (err, data) => {
+      console.log(err);
+      if (err) {
+        return res.status(400).json({
+          error: err,
+        });
+      }
+      console.log(data);
+      console.log("Done.");
+      fs.unlinkSync(req.file.path);
+      return res.json({
+        message: "success",
       });
     }
-    res.json({
-      title: video.title,
-      description: video.description,
-      tags: video.tags,
-      privacyStatus: video.privacyStatus,
-    });
-  });
+  );
 };
