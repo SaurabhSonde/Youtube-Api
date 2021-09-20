@@ -31,7 +31,7 @@ var Storage = multer.diskStorage({
 
 exports.upload = multer({
   storage: Storage,
-}).single("media"); //Field name and max count
+}).array("media"); //Field name and max count
 
 // autheticate user
 exports.authenticate = (req, res) => {
@@ -81,47 +81,56 @@ exports.callback = (req, res) => {
 exports.uploadVideo = (req, res) => {
   const { title, description, tags, privacyStatus } = req.body;
   const youtube = google.youtube({ version: "v3", auth: oauth2Client });
-  const video = new Video(req.body);
-  video.media = req.file.path;
-  youtube.videos.insert(
-    {
-      resource: {
-        // Video title and description
-        snippet: {
-          title: title,
-          description: description,
-          tags: tags,
-        },
-        //    status
-        status: {
-          privacyStatus: privacyStatus,
-        },
-      },
-      // This is for the callback function
-      part: "snippet,status",
+  // const video = new Video(req.body);
+  // video.media = req.file.path;
 
-      // Create the readable stream to upload the video
-      media: {
-        body: fs.createReadStream(req.file.path),
-      },
-    },
-    (err, data) => {
-      console.log(err);
-      if (err) {
-        return res.status(400).json({
-          error: err,
-        });
-      }
-      console.log(data);
-      console.log("Done.");
-      fs.unlinkSync(req.file.path);
-      return res.json({
-        message: "success",
-      });
-    }
-  );
+  console.log(req.files);
+  // youtube.videos.insert(
+  //   {
+  //     resource: {
+  //       // Video title and description
+  //       snippet: {
+  //         title: title,
+  //         description: description,
+  //         tags: tags,
+  //         thumbnails: {
+  //           high: {
+  //             height: 0,
+  //             width: 0,
+  //             url: req.file.path,
+  //           },
+  //         },
+  //       },
+  //       //    status
+  //       status: {
+  //         privacyStatus: privacyStatus,
+  //       },
+  //     },
+  //     // This is for the callback function
+  //     part: "snippet,status",
 
-  // //saving icon object in database
+  //     // Create the readable stream to upload the video
+  //     media: {
+  //       body: fs.createReadStream(req.file.path),
+  //     },
+  //   },
+  //   (err, data) => {
+  //     console.log(err);
+  //     if (err) {
+  //       return res.status(400).json({
+  //         error: err,
+  //       });
+  //     }
+  //     console.log(data);
+  //     console.log("Done.");
+  //     fs.unlinkSync(req.file.path);
+  //     return res.json({
+  //       message: "success",
+  //     });
+  //   }
+  // );
+
+  //saving icon object in database
   // video.save((err, video) => {
   //   if (err) {
   //     return res.status(400).json({
