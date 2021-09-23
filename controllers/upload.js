@@ -1,5 +1,5 @@
 const Video = require("../models/video");
-const OAuth2Data = require("../credentials2.json");
+const OAuth2Data = require("../credentials.json");
 const { google } = require("googleapis");
 const multer = require("multer");
 var fs = require("fs");
@@ -17,7 +17,7 @@ const oauth2Client = new google.auth.OAuth2(
 
 var isAuthenticated = false;
 var scopes =
-  "https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/youtube.force-ssl";
+  "https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/userinfo.profile";
 
 //   multer
 var Storage = multer.diskStorage({
@@ -78,72 +78,118 @@ exports.callback = (req, res) => {
   }
 };
 
+var video_id = "";
+
 exports.uploadVideo = (req, res) => {
   const { title, description, tags, privacyStatus } = req.body;
+
+  const videoInfo = {
+    media: "",
+    thumbnail: "",
+  };
+
+  req.files.forEach((file) => {
+    if (file.mimetype === "video/mp4") {
+      videoInfo.media = file.path;
+    }
+
+    if (file.mimetype === "image/jpeg" || "image/png") {
+      videoInfo.thumbnail = file.path;
+    }
+  });
+
   const youtube = google.youtube({ version: "v3", auth: oauth2Client });
-  // const video = new Video(req.body);
-  // video.media = req.file.path;
+  youtube.videos.insert(
+    {
+      auth: oauth2Client,
+      resource: {
+        // Video title and description
+        snippet: {
+          title: title,
+          description: description,
+          tags: tags,
+        },
+        //    status
+        status: {
+          privacyStatus: privacyStatus,
+        },
+      },
+      // This is for the callback function
+      part: "snippet,status",
+      // Create the readable stream to upload the video
+      media: {
+        body: fs.createReadStream(videoInfo.media),
+      },
+    },
+    async (err, data) => {
+      console.log(err);
+      if (err) {
+        return res.status(400).json({
+          error: err,
+        });
+      }
 
-  console.log(req.files);
-  // youtube.videos.insert(
-  //   {
-  //     resource: {
-  //       // Video title and description
-  //       snippet: {
-  //         title: title,
-  //         description: description,
-  //         tags: tags,
-  //         thumbnails: {
-  //           high: {
-  //             height: 0,
-  //             width: 0,
-  //             url: req.file.path,
-  //           },
-  //         },
-  //       },
-  //       //    status
-  //       status: {
-  //         privacyStatus: privacyStatus,
-  //       },
-  //     },
-  //     // This is for the callback function
-  //     part: "snippet,status",
+      video_id = data.data.id;
 
-  //     // Create the readable stream to upload the video
-  //     media: {
-  //       body: fs.createReadStream(req.file.path),
-  //     },
-  //   },
-  //   (err, data) => {
-  //     console.log(err);
-  //     if (err) {
-  //       return res.status(400).json({
-  //         error: err,
-  //       });
-  //     }
-  //     console.log(data);
-  //     console.log("Done.");
-  //     fs.unlinkSync(req.file.path);
-  //     return res.json({
-  //       message: "success",
-  //     });
-  //   }
-  // );
+      const videoSchema = {
+        url: `https://www.youtube.com/watch?v=${data.data.id}`,
+        videoId: data.data.id,
+        title: data.data.snippet.title,
+        description: data.data.snippet.description,
+        channelName: data.data.snippet.channelTitle,
+        publishedAt: data.data.snippet.publishedAt,
+        uploadStatus: data.data.status.uploadStatus,
+        privacyStatus: data.data.status.privacyStatus,
+      };
 
-  //saving icon object in database
-  // video.save((err, video) => {
-  //   if (err) {
-  //     return res.status(400).json({
-  //       error: "NOT able to save video in DB",
-  //     });
-  //   }
-  //   res.json({
-  //     title: video.title,
-  //     description: video.description,
-  //     tags: video.tags,
-  //     privacyStatus: video.privacyStatus,
-  //   });
-  // });
+      const videoData = await Video.create(videoSchema);
+
+      fs.unlinkSync(videoInfo.media);
+
+      res.status(200).json(videoData);
+    }
+  );
+};
+
+// upload thumbnail
+exports.uploadThumbnail = (req, res) => {
+  const thumbnailInfo = {
+    thumbnail: "",
+  };
+
+  req.files.forEach((file) => {
+    console.log(file);
+    if (file.mimetype === "image/jpeg" || "image/png") {
+      thumbnailInfo.thumbnail = file.path;
+    }
+  });
+
+  const youtube = google.youtube({ version: "v3", auth: oauth2Client });
+
+  youtube.thumbnails.set(
+    {
+      auth: oauth2Client,
+      videoId: video_id,
+      media: {
+        body: fs.createReadStream(thumbnailInfo.thumbnail),
+      },
+    },
+    (err, thumbResponse) => {
+      if (err) {
+        console.log(err);
+        return res.status(400).json({
+          error: err,
+        });
+      }
+      console.log(thumbResponse);
+
+      fs.unlinkSync(thumbnailInfo.thumbnail);
+
+      return res.status(200).json({
+        message: "Thumbnail Uploaded Successfully.",
+      });
+    }
+  );
 };
 
 // brodcast video
@@ -188,6 +234,7 @@ exports.broadcastVideo = (req, res) => {
       }
       console.log(data);
       console.log("Done.");
+
       fs.unlinkSync(req.file.path);
       return res.json({
         message: "success",
