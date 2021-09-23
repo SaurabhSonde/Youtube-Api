@@ -9,13 +9,20 @@ const videoSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
-  tags: {
+  url: {
     type: String,
-    required: true,
   },
-  media: {
+  channelName: {
     type: String,
-    required: true,
+  },
+  publishedAt: {
+    type: String,
+  },
+  uploadStatus: {
+    type: String,
+  },
+  videoId: {
+    type: String,
   },
   privacyStatus: {
     type: String,
