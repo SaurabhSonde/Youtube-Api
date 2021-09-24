@@ -17,7 +17,7 @@ const oauth2Client = new google.auth.OAuth2(
 
 var isAuthenticated = false;
 var scopes =
-  "https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/userinfo.profile";
+  "https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/youtube.force-ssl";
 
 //   multer
 var Storage = multer.diskStorage({
@@ -78,8 +78,7 @@ exports.callback = (req, res) => {
   }
 };
 
-var video_id = "";
-
+// upload youtube video
 exports.uploadVideo = (req, res) => {
   const { title, description, tags, privacyStatus } = req.body;
 
@@ -124,12 +123,13 @@ exports.uploadVideo = (req, res) => {
     async (err, data) => {
       console.log(err);
       if (err) {
+        fs.unlinkSync(videoInfo.media);
         return res.status(400).json({
           error: err,
         });
       }
 
-      video_id = data.data.id;
+      const video_id = data.data.id;
 
       const videoSchema = {
         url: `https://www.youtube.com/watch?v=${data.data.id}`,
@@ -146,36 +146,24 @@ exports.uploadVideo = (req, res) => {
 
       fs.unlinkSync(videoInfo.media);
 
-      res.status(200).json(videoData);
+      uploadThumbnail(videoInfo.thumbnail, res, video_id);
     }
   );
 };
 
-// upload thumbnail
-exports.uploadThumbnail = (req, res) => {
-  const thumbnailInfo = {
-    thumbnail: "",
-  };
-
-  req.files.forEach((file) => {
-    console.log(file);
-    if (file.mimetype === "image/jpeg" || "image/png") {
-      thumbnailInfo.thumbnail = file.path;
-    }
-  });
-
+const uploadThumbnail = (thumbnail, res, videoId) => {
   const youtube = google.youtube({ version: "v3", auth: oauth2Client });
-
   youtube.thumbnails.set(
     {
       auth: oauth2Client,
-      videoId: video_id,
+      videoId: videoId,
       media: {
-        body: fs.createReadStream(thumbnailInfo.thumbnail),
+        body: fs.createReadStream(thumbnail),
       },
     },
     (err, thumbResponse) => {
       if (err) {
+        fs.unlinkSync(thumbnail);
         console.log(err);
         return res.status(400).json({
           error: err,
@@ -183,7 +171,7 @@ exports.uploadThumbnail = (req, res) => {
       }
       console.log(thumbResponse);
 
-      fs.unlinkSync(thumbnailInfo.thumbnail);
+      fs.unlinkSync(thumbnail);
 
       return res.status(200).json({
         message: "Thumbnail Uploaded Successfully.",
@@ -202,6 +190,21 @@ exports.broadcastVideo = (req, res) => {
     scheduledStartTime,
     scheduledEndTime,
   } = req.body;
+
+  const videoInfo = {
+    media: "",
+    thumbnail: "",
+  };
+
+  req.files.forEach((file) => {
+    if (file.mimetype === "video/mp4") {
+      videoInfo.media = file.path;
+    }
+
+    if (file.mimetype === "image/jpeg" || "image/png") {
+      videoInfo.thumbnail = file.path;
+    }
+  });
   const youtube = google.youtube({ version: "v3", auth: oauth2Client });
 
   youtube.liveBroadcasts.insert(
@@ -222,23 +225,24 @@ exports.broadcastVideo = (req, res) => {
       },
       part: "snippet,status",
       media: {
-        body: fs.createReadStream(req.file.path),
+        body: fs.createReadStream(videoInfo.media),
       },
     },
     (err, data) => {
       console.log(err);
       if (err) {
+        fs.unlinkSync(videoInfo.media);
         return res.status(400).json({
           error: err,
         });
       }
       console.log(data);
-      console.log("Done.");
 
-      fs.unlinkSync(req.file.path);
-      return res.json({
+      fs.unlinkSync(videoInfo.media);
+      res.status(200).json({
         message: "success",
       });
+      uploadThumbnail(videoInfo.thumbnail, res, video_id);
     }
   );
 };
